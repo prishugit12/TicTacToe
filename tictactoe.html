@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Tic Tac Toe — Minimal 3D UI</title>
+<style>
+  :root{
+    --bg:#071425; --card:#071a26; --muted:#9fb7c2; --accent:#6be4c9;
+    --glass: rgba(255,255,255,0.02);
+  }
+  *{box-sizing:border-box; font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
+  body{margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; background:linear-gradient(180deg,#04121a,#07202a); color:#e8f6f4}
+
+  .ui{width:560px; max-width:96vw; display:grid; gap:18px; align-items:center}
+  .header{display:flex;justify-content:space-between;align-items:center}
+  h1{margin:0;font-size:20px;color:var(--accent)}
+  .sub{color:var(--muted); font-size:13px}
+
+  .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent); padding:14px; border-radius:12px; box-shadow:0 20px 50px rgba(0,0,0,0.6)}
+  .controls{display:flex;gap:10px;align-items:center}
+
+  /* board */
+  .stage{width:420px; height:420px; perspective:900px; margin:0 auto}
+  .board{
+    width:100%; height:100%; display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); gap:14px;
+    transform-style:preserve-3d; transform: rotateX(12deg) rotateY(-10deg);
+    padding:18px; border-radius:12px; background:linear-gradient(180deg,#0b2230,#08202a); box-shadow:0 18px 60px rgba(0,0,0,0.6)
+  }
+  .cell{border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:64px; font-weight:900; cursor:pointer;
+    background:linear-gradient(180deg, rgba(255,255,255,0.015), transparent); color:#dffcf3; box-shadow: 0 8px 28px rgba(0,0,0,0.6); transform: translateZ(16px);
+    transition: transform .22s ease, box-shadow .22s}
+  .cell:hover{transform: translateZ(26px) scale(1.02)}
+  .x{color:#ffb4a2}
+  .o{color:#9be6c7}
+
+  .status{color:var(--muted); font-size:14px}
+  .mode-toggle{padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:var(--glass);cursor:pointer;color:var(--muted)}
+
+  @media (max-width:560px){ .stage{width:92vw;height:92vw} .board{padding:12px} .cell{font-size:44px} }
+</style>
+</head>
+<body>
+  <div class="ui">
+    <div class="header">
+      <div>
+        <h1>Minimal 3D Tic Tac Toe</h1>
+        <div class="sub">Choose mode — AI plays as O. AI uses minimax for strong play.</div>
+      </div>
+      <div class="controls">
+        <button class="mode-toggle" id="modeBtn">Mode: 1P (vs AI)</button>
+        <button class="mode-toggle" id="resetBtn">Reset</button>
+      </div>
+    </div>
+
+    <div class="card" style="text-align:center">
+      <div class="stage">
+        <div id="board" class="board" role="grid" aria-label="Tic Tac Toe board"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+        <div class="status" id="status">X's turn</div>
+        <div class="sub" style="font-size:13px">AI is optimal (minimax). Minimal & modern UI.</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* Minimal modern Tic-Tac-Toe with AI (minimax)
+   - Single HTML file
+   - 1P (vs AI) or 2P mode toggle
+   - AI uses minimax for perfect play (cannot be beaten)
+   - Minimal UI with subtle 3D transforms
+*/
+
+const boardEl = document.getElementById('board');
+const statusEl = document.getElementById('status');
+const modeBtn = document.getElementById('modeBtn');
+const resetBtn = document.getElementById('resetBtn');
+
+let board = Array(9).fill(null); // 'X' | 'O' | null
+let turn = 'X';
+let playing = true;
+let mode = '1P'; // '1P' or '2P' ; AI plays 'O'
+
+/* ---------- Build board UI ---------- */
+function buildBoard(){
+  boardEl.innerHTML = '';
+  for(let i=0;i<9;i++){
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.dataset.index = i;
+    cell.addEventListener('click', onCellClick);
+    boardEl.appendChild(cell);
+  }
+  updateStatus();
+}
+
+/* ---------- Click handler ---------- */
+function onCellClick(e){
+  const idx = Number(e.currentTarget.dataset.index);
+  if(!playing) return;
+  if(board[idx]) return;
+  // If single-player and it's AI's turn, ignore clicks
+  if(mode === '1P' && turn === 'O') return;
+  makeMove(idx, turn);
+  if(checkWin(turn)){
+    statusEl.textContent = `${turn} wins!`;
+    playing = false;
+    highlightWin(turn);
+    return;
+  }
+  if(board.every(x=>x!==null)){ statusEl.textContent = 'Draw!'; playing=false; return; }
+  turn = turn === 'X' ? 'O' : 'X';
+  updateStatus();
+  if(mode === '1P' && turn === 'O' && playing){
+    // AI move after short delay
+    setTimeout(()=> {
+      const aiMoveIndex = findBestMove(board.slice());
+      makeMove(aiMoveIndex, 'O');
+      if(checkWin('O')){ statusEl.textContent = `O wins!`; playing=false; highlightWin('O'); return; }
+      if(board.every(x=>x!==null)){ statusEl.textContent = 'Draw!'; playing=false; return; }
+      turn = 'X';
+      updateStatus();
+    }, 250);
+  }
+}
+
+/* ---------- Make move and render ---------- */
+function makeMove(idx, player){
+  board[idx] = player;
+  const cell = boardEl.children[idx];
+  cell.textContent = player;
+  cell.classList.add(player === 'X' ? 'x' : 'o');
+}
+
+/* ---------- Status update ---------- */
+function updateStatus(){
+  if(!playing) return;
+  statusEl.textContent = `${turn}'s turn`;
+}
+
+/* ---------- Reset ---------- */
+function reset(){
+  board.fill(null);
+  turn = 'X';
+  playing = true;
+  buildBoard();
+  statusEl.textContent = `X's turn`;
+}
+
+/* ---------- Mode toggle ---------- */
+modeBtn.addEventListener('click', ()=>{
+  mode = mode === '1P' ? '2P' : '1P';
+  modeBtn.textContent = `Mode: ${mode === '1P' ? '1P (vs AI)' : '2P'}`;
+  reset();
+});
+
+/* ---------- Reset button ---------- */
+resetBtn.addEventListener('click', reset);
+
+/* ---------- Win detection ---------- */
+const LINES = [
+  [0,1,2],[3,4,5],[6,7,8],
+  [0,3,6],[1,4,7],[2,5,8],
+  [0,4,8],[2,4,6]
+];
+
+function checkWin(player){
+  return LINES.some(line => line.every(i => board[i] === player));
+}
+
+/* Highlight winning line */
+function highlightWin(player){
+  const line = LINES.find(l => l.every(i => board[i] === player));
+  if(!line) return;
+  line.forEach(i => {
+    boardEl.children[i].style.boxShadow = '0 12px 36px rgba(0,0,0,0.7), 0 0 0 6px rgba(255,255,255,0.02) inset';
+    boardEl.children[i].style.transform = 'translateZ(40px) scale(1.03)';
+  });
+}
+
+/* ---------- Minimax AI (optimal) ---------- */
+function findBestMove(b){
+  // AI plays 'O', opponent 'X'
+  // Return index of best move
+  let bestScore = -Infinity;
+  let bestMove = null;
+  for(let i=0;i<9;i++){
+    if(b[i] === null){
+      b[i] = 'O';
+      const score = minimax(b, 0, false);
+      b[i] = null;
+      if(score > bestScore){
+        bestScore = score;
+        bestMove = i;
+      }
+    }
+  }
+  // If something went wrong, pick random empty
+  if(bestMove === null){
+    const empties = b.map((v,i)=>v===null?i:null).filter(v=>v!==null);
+    return empties[Math.floor(Math.random()*empties.length)];
+  }
+  return bestMove;
+}
+
+/* Scores: O (AI) = +1, X (human) = -1, draw = 0 */
+function evaluate(b){
+  if(LINES.some(l => l.every(i => b[i] === 'O'))) return 1;
+  if(LINES.some(l => l.every(i => b[i] === 'X'))) return -1;
+  return 0;
+}
+
+function minimax(b, depth, isMaximizing){
+  const score = evaluate(b);
+  if(score !== 0) return score;
+  if(b.every(v=>v!==null)) return 0;
+
+  if(isMaximizing){
+    let best = -Infinity;
+    for(let i=0;i<9;i++){
+      if(b[i]===null){
+        b[i]='O';
+        const val = minimax(b, depth+1, false);
+        b[i]=null;
+        best = Math.max(best, val);
+      }
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for(let i=0;i<9;i++){
+      if(b[i]===null){
+        b[i]='X';
+        const val = minimax(b, depth+1, true);
+        b[i]=null;
+        best = Math.min(best, val);
+      }
+    }
+    return best;
+  }
+}
+
+/* ---------- Init ---------- */
+buildBoard();
+
+</script>
+</body>
+</html>
